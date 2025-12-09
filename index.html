@@ -102,18 +102,18 @@
 
     <section class="controls">
       <div class="control-group">
-        <h2>Series 1</h2>
+        <h2>Bank Rate (fixed)</h2>
         <label for="series1Rule">Rule</label>
-        <select id="series1Rule"></select>
+        <select id="series1Rule" disabled></select>
 
         <label for="series1Year">Year</label>
         <select id="series1Year"></select>
       </div>
 
       <div class="control-group">
-        <h2>Series 2</h2>
-        <label for="series2Rule">Rule</label>
-        <select id="series2Rule"></select>
+        <h2>Compare Lines</h2>
+        <label for="series2Rule">Rules (multi-select)</label>
+        <select id="series2Rule" multiple size="5"></select>
 
         <label for="series2Year">Year</label>
         <select id="series2Year"></select>
@@ -156,6 +156,8 @@
       "First Difference Rule",
       "Inertial Rule"
     ];
+
+    const COMPARISON_RULES = RULE_COLUMNS.filter(r => r !== "Bank Rate");
 
     // Will become: { [year]: { [ruleName]: [12 monthly values] } }
     const dataByYear = {};
@@ -311,13 +313,20 @@
      *****************************************************/
     function initUI() {
       // populate rule selects
-      const ruleOptions = RULE_COLUMNS.map(rule => ({
+      fillSelect(series1RuleSelect, [{ value: "Bank Rate", label: "Bank Rate" }], {
+        defaultValue: "Bank Rate"
+      });
+
+      const compareRuleOptions = COMPARISON_RULES.map(rule => ({
         value: rule,
         label: rule
       }));
 
-      fillSelect(series1RuleSelect, ruleOptions, { defaultValue: "Bank Rate" });
-      fillSelect(series2RuleSelect, ruleOptions, { defaultValue: "Taylor Rule" });
+      fillSelect(series2RuleSelect, compareRuleOptions, { defaultValue: "Taylor Rule" });
+      // ensure default selection for multi-select
+      Array.from(series2RuleSelect.options).forEach(opt => {
+        opt.selected = opt.value === "Taylor Rule";
+      });
 
       // populate year selects
       const yearOptions = availableYears.map(y => ({
@@ -331,7 +340,7 @@
       fillSelect(series1YearSelect, yearOptions, { defaultValue: String(earliest) });
       fillSelect(series2YearSelect, yearOptions, { defaultValue: String(latest) });
 
-      [series1RuleSelect, series1YearSelect, series2RuleSelect, series2YearSelect]
+      [series1YearSelect, series2RuleSelect, series2YearSelect]
         .forEach(sel => sel.addEventListener("change", updateChart));
     }
 
@@ -345,9 +354,12 @@
     function initChart() {
       const ctx = document.getElementById("rateChart").getContext("2d");
 
-      const colors = [
-        "#7e0a0d", // main
-        "#161c4e"  // deep accent
+      const palette = [
+        "#7e0a0d", // main (Bank Rate highlight)
+        "#161c4e",
+        "#ebc6c0",
+        "#787878",
+        "#bebebe"
       ];
 
       chartInstance = new Chart(ctx, {
@@ -356,23 +368,15 @@
           labels: monthLabels,
           datasets: [
             {
-              label: "Series 1",
+              label: "Bank Rate",
               data: [],
-              borderColor: colors[0],
-              backgroundColor: colors[0],
-              borderWidth: 2,
-              pointRadius: 3,
-              tension: 0.25
-            },
-            {
-              label: "Series 2",
-              data: [],
-              borderColor: colors[1],
-              backgroundColor: colors[1],
-              borderWidth: 2,
-              borderDash: [6, 4],
-              pointRadius: 3,
-              tension: 0.25
+              borderColor: palette[0],
+              backgroundColor: palette[0],
+              borderWidth: 3,
+              pointRadius: 4,
+              pointBackgroundColor: "#ffffff",
+              pointBorderColor: palette[0],
+              tension: 0.2
             }
           ]
         },
@@ -427,19 +431,35 @@
     function updateChart() {
       if (!chartInstance) return;
 
-      const rule1 = series1RuleSelect.value;
       const year1 = series1YearSelect.value;
-      const rule2 = series2RuleSelect.value;
       const year2 = series2YearSelect.value;
 
-      const data1 = getSeriesData(year1, rule1);
-      const data2 = getSeriesData(year2, rule2);
+      // Bank Rate dataset (fixed)
+      const bankRateData = getSeriesData(year1, "Bank Rate");
+      chartInstance.data.datasets[0].label = `Bank Rate (${year1})`;
+      chartInstance.data.datasets[0].data = bankRateData;
 
-      chartInstance.data.datasets[0].label = `${rule1} (${year1})`;
-      chartInstance.data.datasets[0].data = data1;
+      // Build comparison datasets from multi-select
+      const selectedRules = Array.from(series2RuleSelect.selectedOptions).map(opt => opt.value);
+      const palette = ["#7e0a0d", "#161c4e", "#ebc6c0", "#787878", "#bebebe"];
 
-      chartInstance.data.datasets[1].label = `${rule2} (${year2})`;
-      chartInstance.data.datasets[1].data = data2;
+      const comparisonDatasets = selectedRules.map((rule, idx) => {
+        const color = palette[(idx + 1) % palette.length]; // skip 0 because used for bank rate
+        return {
+          label: `${rule} (${year2})`,
+          data: getSeriesData(year2, rule),
+          borderColor: color,
+          backgroundColor: color,
+          borderWidth: 2,
+          borderDash: rule === "Bank Rate" ? [] : [6, 4],
+          pointRadius: 3,
+          pointBackgroundColor: "#ffffff",
+          pointBorderColor: color,
+          tension: 0.2
+        };
+      });
+
+      chartInstance.data.datasets = [chartInstance.data.datasets[0], ...comparisonDatasets];
 
       chartInstance.update();
     }
