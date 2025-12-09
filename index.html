@@ -83,7 +83,7 @@
 
     .chart-wrapper {
       position: relative;
-      height: 420px;
+      height: 504px;
     }
 
     .note {
@@ -406,8 +406,8 @@
                 text: "Interest rate (%)"
               },
               beginAtZero: false,
-              min: globalMin !== null ? Math.max(0, globalMin - 1) : 0,
-              max: globalMax !== null ? globalMax + 1 : 7,
+              min: globalMin !== null ? Math.max(0, Math.floor((globalMin - 1) * 2) / 2) : 0,
+              max: globalMax !== null ? Math.ceil((globalMax + 1) * 2) / 2 : 7,
               ticks: {
                 stepSize: 0.5,
                 callback: function (value) {
