@@ -106,16 +106,7 @@
 
     <section class="controls">
       <div class="control-group">
-        <h2>Bank Rate (fixed)</h2>
-        <label for="series1Rule">Rule</label>
-        <select id="series1Rule" disabled></select>
-
-        <label for="series1Year">Year</label>
-        <select id="series1Year"></select>
-      </div>
-
-      <div class="control-group">
-        <h2>Compare Lines</h2>
+        <h2>Rules</h2>
         <label for="series2Rule">Rules (multi-select)</label>
         <select id="series2Rule" multiple size="5"></select>
 
@@ -168,8 +159,6 @@
     let globalMin = null;
     let globalMax = null;
 
-    const series1RuleSelect = document.getElementById("series1Rule");
-    const series1YearSelect = document.getElementById("series1Year");
     const series2RuleSelect = document.getElementById("series2Rule");
     const series2YearSelect = document.getElementById("series2Year");
     const errorMessageEl = document.getElementById("errorMessage");
@@ -318,11 +307,7 @@
      * 5. UI & CHART SETUP
      *****************************************************/
     function initUI() {
-      // populate rule selects
-      fillSelect(series1RuleSelect, [{ value: "Bank Rate", label: "Bank Rate" }], {
-        defaultValue: "Bank Rate"
-      });
-
+      // populate comparison rules
       const compareRuleOptions = COMPARISON_RULES.map(rule => ({
         value: rule,
         label: rule
@@ -334,7 +319,7 @@
         opt.selected = opt.value === "Taylor Rule";
       });
 
-      // populate year selects
+      // populate year select
       const yearOptions = availableYears.map(y => ({
         value: String(y),
         label: String(y)
@@ -342,10 +327,9 @@
 
       const defaultYear = availableYears.includes(2024) ? "2024" : String(availableYears[availableYears.length - 1]);
 
-      fillSelect(series1YearSelect, yearOptions, { defaultValue: defaultYear });
       fillSelect(series2YearSelect, yearOptions, { defaultValue: defaultYear });
 
-      [series1YearSelect, series2RuleSelect, series2YearSelect]
+      [series2RuleSelect, series2YearSelect]
         .forEach(sel => sel.addEventListener("change", updateChart));
     }
 
@@ -440,12 +424,11 @@
     function updateChart() {
       if (!chartInstance) return;
 
-      const year1 = series1YearSelect.value;
-      const year2 = series2YearSelect.value;
+      const selectedYear = series2YearSelect.value;
 
-      // Bank Rate dataset (fixed)
-      const bankRateData = getSeriesData(year1, "Bank Rate");
-      chartInstance.data.datasets[0].label = `Bank Rate (${year1})`;
+      // Bank Rate dataset (uses same year as rules)
+      const bankRateData = getSeriesData(selectedYear, "Bank Rate");
+      chartInstance.data.datasets[0].label = `Bank Rate (${selectedYear})`;
       chartInstance.data.datasets[0].data = bankRateData;
 
       // Build comparison datasets from multi-select
@@ -455,8 +438,8 @@
       const comparisonDatasets = selectedRules.map((rule, idx) => {
         const color = palette[(idx + 1) % palette.length]; // skip 0 because used for bank rate
         return {
-          label: `${rule} (${year2})`,
-          data: getSeriesData(year2, rule),
+          label: `${rule} (${selectedYear})`,
+          data: getSeriesData(selectedYear, rule),
           borderColor: color,
           backgroundColor: color,
           borderWidth: 2,
