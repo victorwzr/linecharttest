@@ -122,15 +122,13 @@
 </head>
 <body>
   <main class="container">
-    <h1>Monetary policy rules vs Bank rate</h1>
-
+    <h1>Monetary Policy Rules vs Bank Rate</h1>
     <section class="controls">
       <div class="control-group">
         <h2>Rules</h2>
-        <label>Rules</label>
         <div id="series2Rule" class="checkbox-group"></div>
 
-        <label for="series2Year">Year</label>
+        <h2 for="series2Year">Year</h2>
         <select id="series2Year"></select>
       </div>
     </section>
@@ -417,10 +415,7 @@
                 text: "Interest rate (%)"
               },
               beginAtZero: false,
-              min: globalMin !== null ? Math.max(0, Math.floor((globalMin - 1) * 2) / 2) : 0,
-              max: globalMax !== null ? Math.ceil((globalMax + 1) * 2) / 2 : 7,
               ticks: {
-                stepSize: 0.5,
                 callback: function (value) {
                   return parseFloat(value).toFixed(2) + "%";
                 }
