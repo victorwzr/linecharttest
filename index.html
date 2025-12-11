@@ -101,6 +101,64 @@
       height: 16px;
     }
 
+    .slider-container {
+      margin-top: 1rem;
+      padding: 0.75rem;
+      background: #fff7f6;
+      border: 1px solid var(--color-second);
+      border-radius: 10px;
+    }
+
+    .slider-container label {
+      display: block;
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+      color: var(--color-deep);
+    }
+
+    .slider-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .slider-wrapper input[type="range"] {
+      flex: 1;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--color-third);
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    .slider-wrapper input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--color-main);
+      cursor: pointer;
+    }
+
+    .slider-wrapper input[type="range"]::-moz-range-thumb {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--color-main);
+      cursor: pointer;
+      border: none;
+    }
+
+    .date-range-display {
+      font-size: 0.85rem;
+      color: var(--color-deep);
+      min-width: 180px;
+      text-align: center;
+      font-weight: 500;
+    }
+
     .chart-wrapper {
       position: relative;
       height: 504px;
@@ -127,11 +185,16 @@
       <div class="control-group">
         <h2>Rules</h2>
         <div id="series2Rule" class="checkbox-group"></div>
-
-        <h2 for="series2Year">Year</h2>
-        <select id="series2Year"></select>
       </div>
     </section>
+
+    <div class="slider-container">
+      <label>Date Range (12 months)</label>
+      <div class="slider-wrapper">
+        <input type="range" id="dateRangeSlider" min="0" max="0" value="0" step="1" />
+        <span id="dateRangeDisplay" class="date-range-display"></span>
+      </div>
+    </div>
 
     <div class="chart-wrapper">
       <canvas id="rateChart"></canvas>
@@ -156,7 +219,7 @@
     /*****************************************************
      * 2. DATA STRUCTURES
      *****************************************************/
-    const monthLabels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
     // The rule/column names we expect in the sheet:
     const RULE_COLUMNS = [
@@ -169,16 +232,13 @@
 
     const COMPARISON_RULES = RULE_COLUMNS.filter(r => r !== "Bank Rate");
 
-    // Will become: { [year]: { [ruleName]: [12 monthly values] } }
-    const dataByYear = {};
-
-    let availableYears = [];   // e.g. [2023, 2024, 2025]
+    // Chronological data: array of { date: Date, yearMonth: "YYYY-MM", data: {ruleName: value} }
+    let timeSeriesData = [];
     let chartInstance = null;
-    let globalMin = null;
-    let globalMax = null;
 
     const series2RuleSelect = document.getElementById("series2Rule");
-    const series2YearSelect = document.getElementById("series2Year");
+    const dateRangeSlider = document.getElementById("dateRangeSlider");
+    const dateRangeDisplay = document.getElementById("dateRangeDisplay");
     const errorMessageEl = document.getElementById("errorMessage");
 
     /*****************************************************
@@ -222,19 +282,6 @@
       return isNaN(num) ? null : num;
     }
 
-    function fillSelect(select, options, { defaultValue } = {}) {
-      select.innerHTML = "";
-      options.forEach(opt => {
-        const o = document.createElement("option");
-        o.value = opt.value;
-        o.textContent = opt.label;
-        if (defaultValue !== undefined && defaultValue === opt.value) {
-          o.selected = true;
-        }
-        select.appendChild(o);
-      });
-    }
-
     /*****************************************************
      * 4. LOAD & PROCESS GOOGLE SHEET DATA
      *****************************************************/
@@ -272,7 +319,7 @@
 
           processRows(rows);
 
-          if (!availableYears.length) {
+          if (!timeSeriesData.length) {
             showError("No usable data found after parsing. Verify column names and dates.");
             return;
           }
@@ -291,34 +338,35 @@
     }
 
     function processRows(rows) {
+      const dataMap = new Map(); // key: "YYYY-MM", value: { date, data: {} }
+
       rows.forEach(row => {
         const date = parseDateFlexible(row.Date);
         if (!date) return;
 
         const year = date.getFullYear();
-        const monthIndex = date.getMonth(); // 0-11
+        const month = date.getMonth();
+        const yearMonth = `${year}-${String(month + 1).padStart(2, '0')}`;
 
-        if (!dataByYear[year]) {
-          dataByYear[year] = {};
-          RULE_COLUMNS.forEach(rule => {
-            dataByYear[year][rule] = new Array(12).fill(null);
+        if (!dataMap.has(yearMonth)) {
+          dataMap.set(yearMonth, {
+            date: new Date(year, month, 1),
+            yearMonth: yearMonth,
+            data: {}
           });
         }
 
+        const entry = dataMap.get(yearMonth);
         RULE_COLUMNS.forEach(rule => {
           const num = toNumber(row[rule]);
           if (num != null) {
-            dataByYear[year][rule][monthIndex] = num;
-            // Track global min/max
-            if (globalMin === null || num < globalMin) globalMin = num;
-            if (globalMax === null || num > globalMax) globalMax = num;
+            entry.data[rule] = num;
           }
         });
       });
 
-      availableYears = Object.keys(dataByYear)
-        .map(y => +y)
-        .sort((a, b) => a - b);
+      // Convert to sorted array
+      timeSeriesData = Array.from(dataMap.values()).sort((a, b) => a.date - b.date);
     }
 
     /*****************************************************
@@ -345,24 +393,29 @@
         series2RuleSelect.appendChild(label);
       });
 
-      // populate year select
-      const yearOptions = availableYears.map(y => ({
-        value: String(y),
-        label: String(y)
-      }));
-
-      const defaultYear = availableYears.includes(2024) ? "2024" : String(availableYears[availableYears.length - 1]);
-
-      fillSelect(series2YearSelect, yearOptions, { defaultValue: defaultYear });
-
-      series2YearSelect.addEventListener("change", updateChart);
+      // Setup slider
+      const maxIndex = Math.max(0, timeSeriesData.length - 12);
+      dateRangeSlider.max = maxIndex;
+      dateRangeSlider.value = maxIndex; // Start at most recent
+      
+      dateRangeSlider.addEventListener("input", updateChart);
+      
+      updateDateRangeDisplay();
     }
 
-    function getSeriesData(year, rule) {
-      if (!year || !rule) return new Array(12).fill(null);
-      const yearData = dataByYear[year];
-      if (!yearData || !yearData[rule]) return new Array(12).fill(null);
-      return yearData[rule];
+    function updateDateRangeDisplay() {
+      const startIndex = parseInt(dateRangeSlider.value);
+      const endIndex = Math.min(startIndex + 11, timeSeriesData.length - 1);
+      
+      if (timeSeriesData[startIndex] && timeSeriesData[endIndex]) {
+        const startDate = timeSeriesData[startIndex].date;
+        const endDate = timeSeriesData[endIndex].date;
+        
+        const startStr = `${monthNames[startDate.getMonth()]} ${startDate.getFullYear()}`;
+        const endStr = `${monthNames[endDate.getMonth()]} ${endDate.getFullYear()}`;
+        
+        dateRangeDisplay.textContent = `${startStr} - ${endStr}`;
+      }
     }
 
     function initChart() {
@@ -379,7 +432,7 @@
       chartInstance = new Chart(ctx, {
         type: "line",
         data: {
-          labels: monthLabels,
+          labels: [],
           datasets: [
             {
               label: "Bank Rate",
@@ -406,7 +459,7 @@
             x: {
               title: {
                 display: true,
-                text: "Month"
+                text: "Date"
               }
             },
             y: {
@@ -446,11 +499,23 @@
     function updateChart() {
       if (!chartInstance) return;
 
-      const selectedYear = series2YearSelect.value;
+      updateDateRangeDisplay();
 
-      // Bank Rate dataset (uses same year as rules)
-      const bankRateData = getSeriesData(selectedYear, "Bank Rate");
-      chartInstance.data.datasets[0].label = `Bank Rate (${selectedYear})`;
+      const startIndex = parseInt(dateRangeSlider.value);
+      const endIndex = Math.min(startIndex + 11, timeSeriesData.length - 1);
+      const windowData = timeSeriesData.slice(startIndex, endIndex + 1);
+
+      // Generate labels
+      const labels = windowData.map(d => {
+        const month = monthNames[d.date.getMonth()];
+        const year = d.date.getFullYear();
+        return `${month} ${year}`;
+      });
+
+      chartInstance.data.labels = labels;
+
+      // Bank Rate dataset
+      const bankRateData = windowData.map(d => d.data["Bank Rate"] ?? null);
       chartInstance.data.datasets[0].data = bankRateData;
 
       // Build comparison datasets from checked checkboxes
@@ -458,14 +523,14 @@
       const palette = ["#7e0a0d", "#376092", "#82AEB1", "#015555", "#4099ED"];
 
       const comparisonDatasets = selectedRules.map((rule, idx) => {
-        const color = palette[(idx + 1) % palette.length]; // skip 0 because used for bank rate
+        const color = palette[(idx + 1) % palette.length];
         return {
-          label: `${rule} (${selectedYear})`,
-          data: getSeriesData(selectedYear, rule),
+          label: rule,
+          data: windowData.map(d => d.data[rule] ?? null),
           borderColor: color,
           backgroundColor: color,
           borderWidth: 2,
-          borderDash: rule === "Bank Rate" ? [] : [6, 4],
+          borderDash: [6, 4],
           pointRadius: 3,
           pointBackgroundColor: "#ffffff",
           pointBorderColor: color,
