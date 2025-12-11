@@ -81,6 +81,26 @@
       color: #1f1f1f;
     }
 
+    .checkbox-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    .checkbox-label input[type="checkbox"] {
+      cursor: pointer;
+      width: 16px;
+      height: 16px;
+    }
+
     .chart-wrapper {
       position: relative;
       height: 504px;
@@ -107,8 +127,8 @@
     <section class="controls">
       <div class="control-group">
         <h2>Rules</h2>
-        <label for="series2Rule">Rules (multi-select)</label>
-        <select id="series2Rule" multiple size="5"></select>
+        <label>Rules</label>
+        <div id="series2Rule" class="checkbox-group"></div>
 
         <label for="series2Year">Year</label>
         <select id="series2Year"></select>
@@ -307,16 +327,24 @@
      * 5. UI & CHART SETUP
      *****************************************************/
     function initUI() {
-      // populate comparison rules
-      const compareRuleOptions = COMPARISON_RULES.map(rule => ({
-        value: rule,
-        label: rule
-      }));
-
-      fillSelect(series2RuleSelect, compareRuleOptions, { defaultValue: "Taylor Rule" });
-      // ensure default selection for multi-select
-      Array.from(series2RuleSelect.options).forEach(opt => {
-        opt.selected = opt.value === "Taylor Rule";
+      // populate comparison rules as checkboxes
+      COMPARISON_RULES.forEach((rule, index) => {
+        const label = document.createElement("label");
+        label.className = "checkbox-label";
+        
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = rule;
+        checkbox.id = `rule-${index}`;
+        checkbox.checked = rule === "Taylor Rule"; // default checked
+        checkbox.addEventListener("change", updateChart);
+        
+        const span = document.createElement("span");
+        span.textContent = rule;
+        
+        label.appendChild(checkbox);
+        label.appendChild(span);
+        series2RuleSelect.appendChild(label);
       });
 
       // populate year select
@@ -329,8 +357,7 @@
 
       fillSelect(series2YearSelect, yearOptions, { defaultValue: defaultYear });
 
-      [series2RuleSelect, series2YearSelect]
-        .forEach(sel => sel.addEventListener("change", updateChart));
+      series2YearSelect.addEventListener("change", updateChart);
     }
 
     function getSeriesData(year, rule) {
@@ -431,8 +458,8 @@
       chartInstance.data.datasets[0].label = `Bank Rate (${selectedYear})`;
       chartInstance.data.datasets[0].data = bankRateData;
 
-      // Build comparison datasets from multi-select
-      const selectedRules = Array.from(series2RuleSelect.selectedOptions).map(opt => opt.value);
+      // Build comparison datasets from checked checkboxes
+      const selectedRules = Array.from(series2RuleSelect.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
       const palette = ["#7e0a0d", "#376092", "#82AEB1", "#015555", "#4099ED"];
 
       const comparisonDatasets = selectedRules.map((rule, idx) => {
